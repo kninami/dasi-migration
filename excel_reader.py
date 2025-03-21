@@ -52,10 +52,10 @@ def data_to_json(file_url):
             same_business_flag = prev_name == row[0]
             
             accusation_json = {}
-            accusation_json['accused_at'] = row[5]
             name, role = substr_people(row[2])
-            accusation_json['accused_name'] = name
-            accusation_json['accused_role'] = role
+
+            accusation_json['name'] = name
+            accusation_json['role'] = role
             
             # 새로운 비즈니스인 경우
             if not same_business_flag:
@@ -66,11 +66,17 @@ def data_to_json(file_url):
                 # 새 비즈니스 데이터 초기화
                 current_data = {
                     "business": make_business_json(row),
-                    "accusations": [accusation_json]
+                    "accusations": {
+                        "accused_at": row[5],
+                        "office": row[7],
+                        "accused_person":[accusation_json],
+                        "charge": {row[3]}
+					}
                 }
             else:
                 # 같은 비즈니스의 다른 고발 사항이면 배열에 추가
-                current_data["accusations"].append(accusation_json)
+                current_data["accusations"]["accused_person"].append(accusation_json)
+                current_data["accusations"]["charge"].add(row[3])
             
             # 현재 비즈니스 이름 저장
             prev_name = row[0]

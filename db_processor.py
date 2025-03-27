@@ -66,6 +66,30 @@ class DataProcessor:
         self.business_processor = BusinessProcessor()
         self.accusation_processor = AccusationProcessor()
     
+    def process_persons_data(self, data_array: List[Dict[str, Any]]) -> bool:
+        # person 데이터 삽입 
+        # disposition 데이터 삽입 
+        print(data_array)
+    
+    def process_case_sheet_data(self, data_array: List[Dict[str, Any]]) -> bool:
+        person_array = []
+        
+        for data in data_array:
+            case_data = data['case']
+            person_data = data['persons']
+            
+            try:
+                case_insert = {k: v for k, v in case_data.items() if k != 'business_name'}
+                case_id = self.case_processor.insert_case_data(case_insert)
+                person_data['case_id'] = case_id
+                person_array.append(person_data)
+            except Exception as e:
+                print(f"Error processing business data: {e}")
+        
+        if person_array:
+            return self.process_persons_data(person_array)
+        return False
+    
     """여러 고발 데이터를 처리합니다."""
     def process_accusation_data(self, data: List[Dict[str, Any]]) -> bool:
         try:

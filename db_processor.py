@@ -16,9 +16,11 @@ class BusinessProcessor(DbConnector):
         response = self.supabase.table('businesses').insert(data).execute()
         return response.data[0]['id']
     
-    def check_duplicate_business(self, name: str) -> bool:
+    def get_business_id(self, name: str) -> Optional[str]:
         response = self.supabase.table('businesses').select('id').eq('name', name).execute()
-        return len(response.data) > 0
+        if len(response.data) == 0:
+            return None
+        return response.data[0]['id']
     
     def get_business_type(self, type: str, category: str) -> str:
         response = self.supabase.table('business_types').select('id').eq('name', category).execute()
@@ -29,7 +31,6 @@ class BusinessProcessor(DbConnector):
 class AccusationProcessor(DbConnector):
     """고발 데이터를 삽입하고 ID를 반환합니다."""
     def insert_accusation_data(self, business_id: str, accused_at: Any, office: str) -> str:
-        # Timestamp 객체를 문자열로 변환
         if hasattr(accused_at, 'isoformat'):
             accused_at = accused_at.isoformat()    
         response = self.supabase.table('accusations').insert({
@@ -54,22 +55,95 @@ class AccusationProcessor(DbConnector):
             'charge_id': charge_id
         }).execute()
     
-    """혐의 ID를 가져오거나 새로 생성합니다."""
-    def get_charge_id(self, charge: str) -> str:
-        response = self.supabase.table('charges').select('id').eq('name', charge).is_('detail_name', None).execute()
+class CaseProcessor(DbConnector):
+    def insert_case_data(self, data: Dict[str, Any]) -> str:
+        response = self.supabase.table('cases').insert(data).execute()
+        return response.data[0]['id']
+        
+    def insert_case_person_data(self, data):
+        response = self.supabase.table('case_person').insert(data).execute()
+        return response.data[0]['id']
+    
+    def insert_case_person_dispositions(self, data):
+        response = self.supabase.table('case_person_dispositions').insert(data).execute()
+        return response.data[0]['id']
+
+class CommonProcessor(DbConnector):
+    def get_charge_id(self, charge: str, detail_name: str) -> str:
+        response = self.supabase.table('charge_types').select('id').eq('name', charge).eq('detail_name', detail_name).execute()
         if len(response.data) == 0: 
-            response = self.supabase.table('charges').insert({'name': charge}).execute()
+            response = self.supabase.table('charge_types').insert({'name': charge}).execute()
+        return response.data[0]['id']
+    
+    def get_disposition_id(self, disposition: str, detail_name: str) -> str:
+        response = self.supabase.table('disposition_types').select('id').eq('name', disposition).eq('detail_name', detail_name).execute()
+        if len(response.data) == 0: 
+            print(f"Disposition not found: {disposition} {detail_name}")
+            return None
         return response.data[0]['id']
 
 class DataProcessor:
     def __init__(self):
         self.business_processor = BusinessProcessor()
         self.accusation_processor = AccusationProcessor()
+        self.case_processor = CaseProcessor()
+        self.common_processor = CommonProcessor()
     
     def process_persons_data(self, data_array: List[Dict[str, Any]]) -> bool:
-        # person 데이터 삽입 
-        # disposition 데이터 삽입 
-        print(data_array)
+        success = True
+        
+        try:
+            # person 데이터 삽입 
+            for data in data_array:
+                if 'business_name' not in data:
+                    success = False
+                    print(f"Missing business_name in data: {data}")
+                    continue
+                    
+                person_insert = {k: v for k, v in data.items() if k != 'business_name' and k != 'dispositions'}
+                business_id = self.business_processor.get_business_id(data['business_name'])
+                
+                if not business_id:
+                    business_id = self.business_processor.insert_business_data({'name': data['business_name']})
+                
+                person_insert['business_id'] = business_id
+                person_id = self.case_processor.insert_case_person_data(person_insert)
+                
+                # disposition 데이터 삽입
+                if 'dispositions' not in data or not data['dispositions']:
+                    print(f"No dispositions for person with business: {data['business_name']}")
+                    continue
+                    
+                for disposition in data['dispositions']:
+                    charge_id = self.common_processor.get_charge_id(disposition["charge"], disposition["charge_detail"])
+                    disposition_id = self.common_processor.get_disposition_id(disposition["disposition"], disposition["disposition_detail"])
+                    
+                    disposition_insert = {}
+                    disposition_insert['fine_amount'] = disposition["fine_amount"] if disposition["fine_amount"] else 0
+                    disposition_insert['person_id'] = person_id
+                    disposition_insert['disposal_date'] = disposition["disposal_date"]
+                    
+                    if charge_id and disposition_id:
+                        disposition_insert['charge_id'] = charge_id
+                        disposition_insert['disposition_id'] = disposition_id
+                    elif not charge_id:
+                        print(f"Person ID: {person_id} have no charge: {disposition['charge']} {disposition["charge_detail"]}")
+                        success = False
+                    elif not disposition_id:
+                        print(f"Person ID: {person_id} have no disposition: {disposition['disposition']} {disposition["disposition_detail"]}")
+                        success = False
+                    
+                    print(disposition_insert)
+                    try:
+                        self.case_processor.insert_case_person_dispositions(disposition_insert)
+                    except Exception as e:
+                        print(f"Error processing disposition data: {e}")
+                        
+        except Exception as e:
+            print(f"Error processing persons data: {e}")
+            success = False
+        
+        return success
     
     def process_case_sheet_data(self, data_array: List[Dict[str, Any]]) -> bool:
         person_array = []
@@ -78,16 +152,23 @@ class DataProcessor:
             case_data = data['case']
             person_data = data['persons']
             
+            print(person_data)
+            
             try:
                 case_insert = {k: v for k, v in case_data.items() if k != 'business_name'}
                 case_id = self.case_processor.insert_case_data(case_insert)
-                person_data['case_id'] = case_id
-                person_array.append(person_data)
+                
+                for person in person_data:
+                    person['case_id'] = case_id
+                    person_array.append(person)
+                    
             except Exception as e:
                 print(f"Error processing business data: {e}")
         
         if person_array:
-            return self.process_persons_data(person_array)
+            result = self.process_persons_data(person_array)
+            return result
+        
         return False
     
     """여러 고발 데이터를 처리합니다."""
@@ -108,7 +189,7 @@ class DataProcessor:
                     )
                 
                 for charge in accusation["charge"]:
-                    charge_id = self.accusation_processor.get_charge_id(charge)
+                    charge_id = self.common_processor.get_charge_id(charge["name"], None)
                     self.accusation_processor.insert_accusation_charge(accusation_id, charge_id)
             return True
         except Exception as e:

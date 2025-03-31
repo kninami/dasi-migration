@@ -33,13 +33,12 @@ class Helper:
     
     def make_case_json(self, data):
         case_json = {}
-        case_json['business_name'] = data[0]
         case_json['number'] = data[3]
         case_json['agency'] = self.distribute_agency(data[5])
         case_json['office'] = data[5]
         case_json['office_dept'] = data[6]
+        case_json['office_tel'] = data[8]
         case_json['officer'] = data[7]
-        case_json['officer_tel'] = data[8]
         case_json['memo'] = data[14]
         return case_json
     
@@ -86,7 +85,7 @@ class ExcelReader:
                     "charge_detail": row[10], #세부죄목
                     "disposition": row[11],   # 처분결과
                     "disposition_detail": row[12], #처분일자
-                    "disposal_date": row[4], #처분일자
+                    "disposal_date": row[4].strftime("%Y-%m-%d") if isinstance(row[4], pd.Timestamp) else str(row[4]), #처분일자
                     "fine_amount": row[13]
                 }
                 
@@ -103,6 +102,7 @@ class ExcelReader:
                     current_case = {
                         "case": Helper().make_case_json(row),
                         "persons": [{
+                            "business_name": row[0],
                             "name": name,
                             "role": row[2],
                             "dispositions": [disposition]
@@ -121,6 +121,7 @@ class ExcelReader:
                     # 새로운 피의자인 경우
                     if not person_exists:
                         current_case["persons"].append({
+                            "business_name": row[0],
                             "name": name,
                             "role": row[2],
                             "dispositions": [disposition]
@@ -191,5 +192,5 @@ class ExcelReader:
 
 if __name__ == "__main__":
     excel_reader = ExcelReader()
-    data = excel_reader.case_data_to_json('./dasi_data.xlsx')
-    print(data)
+    data = excel_reader.accusation_data_to_json('./dasi_data.xlsx')
+    db_processor.DataProcessor().process_accusation_sheet_data(data)

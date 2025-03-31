@@ -192,5 +192,8 @@ class ExcelReader:
 
 if __name__ == "__main__":
     excel_reader = ExcelReader()
-    data = excel_reader.accusation_data_to_json('./dasi_data.xlsx')
-    db_processor.DataProcessor().process_accusation_sheet_data(data)
+    # data = excel_reader.accusation_data_to_json('./dasi_data.xlsx')
+    # db_processor.DataProcessor().process_accusation_sheet_data(data)
+    
+    data = excel_reader.case_data_to_json('./dasi_data.xlsx')
+    db_processor.DataProcessor().process_case_sheet_data(data)

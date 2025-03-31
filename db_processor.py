@@ -133,7 +133,6 @@ class DataProcessor:
                         print(f"Person ID: {person_id} have no disposition: {disposition['disposition']} {disposition["disposition_detail"]}")
                         success = False
                     
-                    print(disposition_insert)
                     try:
                         self.case_processor.insert_case_person_dispositions(disposition_insert)
                     except Exception as e:
@@ -151,9 +150,7 @@ class DataProcessor:
         for data in data_array:
             case_data = data['case']
             person_data = data['persons']
-            
-            print(person_data)
-            
+                        
             try:
                 case_insert = {k: v for k, v in case_data.items() if k != 'business_name'}
                 case_id = self.case_processor.insert_case_data(case_insert)

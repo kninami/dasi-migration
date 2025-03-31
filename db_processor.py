@@ -42,7 +42,7 @@ class AccusationProcessor(DbConnector):
     
     """고발된 사람 정보를 삽입합니다."""
     def insert_accused_person(self, accusation_id: str, name: str, role: str) -> None:
-        self.supabase.table('accusation_accused_persons').insert({
+        self.supabase.table('accused_person').insert({
             'accusation_id': accusation_id, 
             'name': name, 
             'role': role
@@ -186,11 +186,11 @@ class DataProcessor:
                         accusation_id, 
                         person["name"], 
                         person["role"]
-                    )
-                
+                    )                    
                 for charge in accusation["charge"]:
-                    charge_id = self.common_processor.get_charge_id(charge["name"], None)
-                    self.accusation_processor.insert_accusation_charge(accusation_id, charge_id)
+                    for name in charge:
+                        charge_id = self.common_processor.get_charge_id(name, None)
+                        self.accusation_processor.insert_accusation_charge(accusation_id, charge_id)
             return True
         except Exception as e:
             print(f"Error processing accusation data: {e}")

@@ -56,6 +56,5 @@ def upload_csv():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Vercel에서는 이 부분이 실행되지 않지만, 로컬 개발용으로 유지
 if __name__ == '__main__':
     app.run(debug=True)

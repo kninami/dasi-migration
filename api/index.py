@@ -6,9 +6,14 @@ import os
 import tempfile
 import db_processor
 from dotenv import load_dotenv
+import logging
 
 # 환경 변수 로드
 load_dotenv()
+
+# 로깅 설정
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
@@ -18,6 +23,7 @@ def home():
 
 @app.route('/upload-csv', methods=['POST'])
 def upload_csv():
+    logger.info("Upload endpoint called")
     if 'file' not in request.files:
         return jsonify({"error": "No file part"}), 400
 
@@ -47,6 +53,8 @@ def upload_csv():
         # Clean up the temporary file
         os.remove(temp_file_path)
         
+        logger.info(f"Processing file: {file.filename}")
+        
         # Return the processed data
         return jsonify({
             "message": "File successfully processed",
@@ -54,6 +62,7 @@ def upload_csv():
         }), 200
 
     except Exception as e:
+        logger.error(f"Error processing file: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':

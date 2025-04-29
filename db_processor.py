@@ -22,14 +22,16 @@ class BusinessProcessor(DbConnector):
             return None
         return response.data[0]['id']
     
-    def get_business_type(self, type: str, category: str) -> str:
+    def get_business_type(self, type: str = None, category: str = None) -> str:
         response = self.supabase.table('business_types').select('id').eq('name', category).execute()
         if len(response.data) == 0:  # 데이터가 없는 경우 새로 생성
-            response = self.supabase.table('business_types').insert({'type': type, 'name': category}).execute()
+            insert_data = {'name': category}
+            if type is not None:
+                insert_data['type'] = type
+            response = self.supabase.table('business_types').insert(insert_data).execute()
         return response.data[0]['id']
 
 class AccusationProcessor(DbConnector):
-    """고발 데이터를 삽입하고 ID를 반환합니다."""
     def insert_accusation_data(self, business_id: str, accused_at: Any, office: str) -> str:
         if hasattr(accused_at, 'isoformat'):
             accused_at = accused_at.isoformat()    
@@ -40,7 +42,6 @@ class AccusationProcessor(DbConnector):
         }).execute()
         return response.data[0]['id']
     
-    """고발된 사람 정보를 삽입합니다."""
     def insert_accused_person(self, accusation_id: str, name: str, role: str) -> None:
         self.supabase.table('accused_person').insert({
             'accusation_id': accusation_id, 
@@ -48,13 +49,21 @@ class AccusationProcessor(DbConnector):
             'role': role
         }).execute()
     
-    """고발 혐의 정보를 삽입합니다."""
     def insert_accusation_charge(self, accusation_id: str, charge_id: str) -> None:
         self.supabase.table('accusation_charges').insert({
             'accusation_id': accusation_id, 
             'charge_id': charge_id
         }).execute()
+
+class ReportProcessor(DbConnector):
+    def insert_report_data(self, data: Dict[str, Any]) -> str:
+        response = self.supabase.table('reports').insert(data).execute()
+        return response.data[0]['id']
     
+    def insert_report_disposition(self, data: Dict[str, Any]) -> str:
+        response = self.supabase.table('report_dispositions').insert(data).execute()
+        return response.data[0]['id']
+        
 class CaseProcessor(DbConnector):
     def insert_case_data(self, data: Dict[str, Any]) -> str:
         response = self.supabase.table('cases').insert(data).execute()
@@ -70,16 +79,19 @@ class CaseProcessor(DbConnector):
 
 class CommonProcessor(DbConnector):
     def get_charge_id(self, charge: str, detail_name: str) -> str:
-        response = self.supabase.table('charge_types').select('id').eq('name', charge).eq('detail_name', detail_name).execute()
+        query = self.supabase.table('charge_types').select('id').eq('name', charge)
+        if detail_name: 
+            query = query.eq('detail_name', detail_name)
+        response = query.execute()
         if len(response.data) == 0: 
-            response = self.supabase.table('charge_types').insert({'name': charge}).execute()
+            response = self.supabase.table('charge_types').insert({'name': charge, 'detail_name': detail_name}).execute()
         return response.data[0]['id']
     
     def get_disposition_id(self, disposition: str, detail_name: str) -> str:
-        response = self.supabase.table('disposition_types').select('id').eq('name', disposition).eq('detail_name', detail_name).execute()
-        if len(response.data) == 0: 
-            print(f"Disposition not found: {disposition} {detail_name}")
-            return None
+        query = self.supabase.table('disposition_types').select('id').eq('name', disposition)
+        if detail_name: 
+            query = query.eq('detail_name', detail_name)
+        response = query.execute()
         return response.data[0]['id']
 
 class DataProcessor:
@@ -88,13 +100,14 @@ class DataProcessor:
         self.accusation_processor = AccusationProcessor()
         self.case_processor = CaseProcessor()
         self.common_processor = CommonProcessor()
+        self.report_processor = ReportProcessor()
     
     def process_persons_data(self, data_array: List[Dict[str, Any]]) -> bool:
         success = True
-        
         try:
             # person 데이터 삽입 
             for data in data_array:
+                print(data)
                 if 'business_name' not in data:
                     success = False
                     print(f"Missing business_name in data: {data}")
@@ -117,7 +130,6 @@ class DataProcessor:
                 for disposition in data['dispositions']:
                     charge_id = self.common_processor.get_charge_id(disposition["charge"], disposition["charge_detail"])
                     disposition_id = self.common_processor.get_disposition_id(disposition["disposition"], disposition["disposition_detail"])
-                    
                     disposition_insert = {}
                     disposition_insert['fine_amount'] = disposition["fine_amount"] if disposition["fine_amount"] else 0
                     disposition_insert['person_id'] = person_id
@@ -137,6 +149,7 @@ class DataProcessor:
                         self.case_processor.insert_case_person_dispositions(disposition_insert)
                     except Exception as e:
                         print(f"Error processing disposition data: {e}")
+                print(f"Person ID: {person_id} processed successfully")
                         
         except Exception as e:
             print(f"Error processing persons data: {e}")
@@ -168,7 +181,38 @@ class DataProcessor:
         
         return False
     
-    """여러 고발 데이터를 처리합니다."""
+    def process_report_data(self, data: List[Dict[str, Any]]) -> bool:
+        try:
+            for report in data:
+                business_id = self.business_processor.get_business_id(report["business"]["name"])
+                if not business_id:
+                   business_type_id = self.business_processor.get_business_type(report["business"]["type"], report["business"]["category"])
+                   biz_data = report["business"]
+                   insert_biz_data = {k: v for k, v in biz_data.items() if k != 'category'}
+                   insert_biz_data["business_type_id"] = business_type_id
+                   business_id = self.business_processor.insert_business_data(insert_biz_data)
+                
+                # Create report data dictionary
+                report_data = {
+                    "reported_at": report["reported_at"],
+                    "reported_to": report["reported_to"],
+                    "number": report["number"],
+                    "content_body": report["content_body"],
+                    "business_id": business_id
+                }
+                report_id = self.report_processor.insert_report_data(report_data)
+                
+                # 처분 날짜가 있으면 
+                if report["disposition"]["received_at"]:
+                    disposition_data = report["disposition"]
+                    disposition_data["report_id"] = report_id
+                    self.report_processor.insert_report_disposition(disposition_data)
+                    
+        except Exception as e:
+            print(f"Error processing report data: {e}")
+            return False
+        return True
+    
     def process_accusation_data(self, data: List[Dict[str, Any]]) -> bool:
         try:
             for accusation in data:
@@ -185,15 +229,13 @@ class DataProcessor:
                         person["role"]
                     )                    
                 for charge in accusation["charge"]:
-                    for name in charge:
-                        charge_id = self.common_processor.get_charge_id(name, None)
-                        self.accusation_processor.insert_accusation_charge(accusation_id, charge_id)
+                    charge_id = self.common_processor.get_charge_id(charge, None)
+                    self.accusation_processor.insert_accusation_charge(accusation_id, charge_id)
             return True
         except Exception as e:
             print(f"Error processing accusation data: {e}")
             return False
     
-    """고발 시트에서 가져온 데이터를 처리합니다."""
     def process_accusation_sheet_data(self, data_array: List[Dict[str, Any]]) -> bool:
         accusation_array = []
         

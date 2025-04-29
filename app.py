@@ -5,7 +5,16 @@ import excel_reader
 import os
 import tempfile
 import db_processor
+from dotenv import load_dotenv
+
+# 환경 변수 로드
+load_dotenv()
+
 app = Flask(__name__)
+
+@app.route('/', methods=['GET'])
+def home():
+    return jsonify({"message": "Welcome to the API"})
 
 @app.route('/upload-csv', methods=['POST'])
 def upload_csv():
@@ -26,7 +35,13 @@ def upload_csv():
         # Process the file using ExcelReader
         reader = excel_reader.ExcelReader()
         
-        result = reader.case_data_to_json(temp_file_path)
+        # 파일 확장자에 따라 처리
+        file_ext = os.path.splitext(file.filename)[1].lower()
+        if file_ext == '.csv':
+            result = reader.case_data_to_json(temp_file_path)  # 수정된 read_excel_file 메서드가 CSV도 처리
+        else:
+            result = reader.case_data_to_json(temp_file_path)
+            
         db_processor.DataProcessor().process_case_sheet_data(result)
         
         # Clean up the temporary file
@@ -41,5 +56,6 @@ def upload_csv():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# Vercel에서는 이 부분이 실행되지 않지만, 로컬 개발용으로 유지
 if __name__ == '__main__':
     app.run(debug=True)

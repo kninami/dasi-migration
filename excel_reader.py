@@ -279,7 +279,6 @@ class ExcelReader:
                 data_array.append(current_data)
                 
             return data_array
-
     def process_csv_data(self, df):
 
         df.fillna("", inplace=True)
@@ -305,7 +304,7 @@ class ExcelReader:
             
             # 피의자 정보 추출
             name = "성명불상" if row[1] == "" else row[1]
-             
+            
             # 같은 사건인지 확인
             if case_id != prev_case_id:
                 # 이전 사건 데이터가 있으면 배열에 추가
@@ -350,6 +349,20 @@ class ExcelReader:
 
         return data_array
 
+    def read_csv_file(self, file_path):
+        try:
+            df = pd.read_csv(file_path, header=0)  # 첫 번째 행을 헤더로 사용
+            return df
+        except Exception as e:
+            print(f"CSV 파일을 읽는 중 오류가 발생했습니다: {e}")
+            return None
+            
+    def case_data_from_csv(self, file_path):
+        df = self.read_csv_file(file_path)
+        if df is None:
+            print("CSV 파일을 읽는 중 오류가 발생했습니다.")
+            return None
+        return self.process_csv_data(df)
 
 if __name__ == "__main__":
     excel_reader = ExcelReader()

@@ -42,9 +42,12 @@ def upload_csv():
         reader = excel_reader.ExcelReader()
         
         result = reader.case_data_from_csv(temp_file_path)
-        db_processor.DataProcessor().process_case_sheet_data(result)
+        logger.info(f"Uploaded Result: {result}")
+        try:
+            db_processor.DataProcessor().process_case_sheet_data(result)
+        except Exception as e:
+            logger.error(f"Error processing case sheet data: {str(e)}")
         
-        # Clean up the temporary file
         os.remove(temp_file_path)
         
         logger.info(f"Processing file: {file.filename}")
